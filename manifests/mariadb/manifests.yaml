@@ -1,0 +1,17 @@
+database:
+  externalDB:
+    host: 8.tcp.ngrok.io
+    passwordSecret:
+      key: customkey
+      name: somesecret
+    pipelineDBName: mlpipeline
+    port: "10576"
+    username: someuser
+---
+kind: Secret
+apiVersion: v1
+metadata:
+  name: somesecret
+stringData:
+  customkey: DMf2iMgQQ4BTd38U6_LyFEdvZfsqt3LV
+type: Opaque

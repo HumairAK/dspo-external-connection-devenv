@@ -1,0 +1,107 @@
+# mariadb --host=8.tcp.ngrok.io --port=18104 --user=testuser  --password=testpsw
+# curl -s localhost:4040/api/tunnels | jq .tunnels[0].public_url
+
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: mariadb
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: mariadb
+  template:
+    metadata:
+      labels:
+        app: mariadb
+        component: data-science-pipelines
+    spec:
+      volumes:
+        - name: mariadb-persistent-storage
+          persistentVolumeClaim:
+            claimName: mariadb
+        - name: config
+          emptyDir: {}
+      containers:
+        - name: ngrok
+          image:  quay.io/hukhan/ngrok-curl:3.1.1-alpine-1
+          command: ["/bin/sh", "-c", "ngrok config add-authtoken ${NGROK_AUTH} && ngrok tcp 3306"]
+          env:
+            - name: NGROK_AUTH
+              valueFrom:
+                secretKeyRef:
+                  key: token
+                  name: ngrok-auth
+          ports:
+            - containerPort: 4040
+          volumeMounts:
+            - name: config
+              mountPath: /.config
+        - resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+            requests:
+              cpu: 300m
+              memory: 800Mi
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - '-i'
+                - '-c'
+                - >-
+                  MYSQL_PWD=$MYSQL_PASSWORD mysql -h 127.0.0.1 -u $MYSQL_USER -D
+                  $MYSQL_DATABASE -e 'SELECT 1'
+            initialDelaySeconds: 5
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          terminationMessagePath: /dev/termination-log
+          name: mariadb
+          livenessProbe:
+            tcpSocket:
+              port: 3306
+            initialDelaySeconds: 30
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          env:
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  key: username
+                  name: ngrok-auth
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: ngrok-auth
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  key: database
+                  name: ngrok-auth
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: rootpsw
+                  name: ngrok-auth
+          ports:
+            - containerPort: 3306
+              protocol: TCP
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: mariadb-persistent-storage
+              mountPath: /var/lib/mysql
+          terminationMessagePolicy: File
+          image: 'registry.redhat.io/rhel8/mariadb-103:1-188'
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler
