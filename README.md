@@ -27,8 +27,6 @@ cd dspo-external-connection-devenv
 
 Once the pods in both namespaces are READY then run the following: 
 ```bash
-./devenv.sh generate minio-external mariadb-external
-
 # deploy the dspa + secrets in a namespace: 
 cd output
 oc new-project ds-project

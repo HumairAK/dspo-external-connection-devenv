@@ -93,11 +93,11 @@ deploy_minio(){
     echo "Minio Bucket to be used: ${bucket}"
     echo "Minio will be deployed in namespace: ${minio_namespace}"
 
-    pushd manifests/minio
+    pushd manifests/minio > /dev/null
     var=$(passwordgen) yq '.stringData.accesskey = env(var)' secret.yaml | \
       var2=$(sleep 1s && passwordgen)  yq '.stringData.secretkey = env(var2)' | oc -n ${minio_namespace} apply -f -
     kustomize build . | oc -n ${minio_namespace} apply -f -
-    popd
+    popd > /dev/null
     echo "Finished deploying..Minio."
 }
 
@@ -108,13 +108,13 @@ deploy_mariadb(){
   echo "MariaDB User to be created: ${user}"
   echo "MariaDB will be deployed in namespace: ${mariadb_namespace}"
 
-  pushd manifests/mariadb
+  pushd manifests/mariadb > /dev/null
   var=$(echo ${ngrok_token}) yq '.stringData.token = env(var)' secret.yaml | \
     var2=$(passwordgen) yq '.stringData.password = env(var2)' | \
     var3=$(passwordgen) yq '.stringData.rootpsw = env(var3)' | \
     var4=$(echo ${user}) yq '.stringData.username = env(var4)' | oc -n ${mariadb_namespace} apply -f -
   kustomize build . | oc -n ${mariadb_namespace} apply -f -
-  popd
+  popd > /dev/null
 }
 
 deploy(){
@@ -144,6 +144,8 @@ generate(){
   BUCKET=$bucket
 
   DB_POD=$(oc -n ${mariadb_namespace} get pod -l app=mariadb --no-headers | awk '{print $1}')
+  oc wait --for=condition=Ready pod/$DB_POD
+
   MARIADBHOSTPORT=`oc -n ${mariadb_namespace} exec -c ngrok -ti $DB_POD -- curl -s localhost:4040/api/tunnels | jq .tunnels[0].public_url | grep tcp`
   DATABASE=$database
   DB_USER=$user
@@ -225,6 +227,7 @@ case $command in
     ;;
   deploy)
     deploy "${@:2}"
+    generate $2 $3
     ;;
   cleanup)
     cleanup "${@:2}"
