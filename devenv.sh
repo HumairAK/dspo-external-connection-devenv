@@ -145,7 +145,7 @@ generate(){
 
   echo "Fetching DB Pod"
   DB_POD=$(oc -n ${mariadb_namespace} get pod -l app=mariadb --no-headers | awk '{print $1}')
-  oc wait --for=condition=Ready pod/$DB_POD
+  oc -n ${mariadb_namespace} wait --for=condition=Ready pod/$DB_POD
 
   echo "Fetching DB host and port"
   MARIADBHOSTPORT=`oc -n ${mariadb_namespace} exec -c ngrok -ti $DB_POD -- curl -s localhost:4040/api/tunnels | jq .tunnels[0].public_url | grep tcp`
