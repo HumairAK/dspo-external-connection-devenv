@@ -134,11 +134,12 @@ deploy_mariadb(){
   echo "MariaDB User to be created: ${user}"
   echo "MariaDB will be deployed in namespace: ${mariadb_namespace}"
 
-  pushd ${mariaDBManifestsPath} > /dev/null
-  var=$(echo ${ngrok_token}) yq '.stringData.token = env(var)' secret.yaml | \
+
+  var=$(echo ${ngrok_token}) yq '.stringData.token = env(var)' manifests/mariadb/base/secret.yaml | \
     var2=$(passwordgen) yq '.stringData.password = env(var2)' | \
     var3=$(passwordgen) yq '.stringData.rootpsw = env(var3)' | \
     var4=$(echo ${user}) yq '.stringData.username = env(var4)' | oc -n ${mariadb_namespace} apply -f -
+  pushd ${mariaDBManifestsPath} > /dev/null
   kustomize build . | oc -n ${mariadb_namespace} apply -f -
   popd > /dev/null
 }

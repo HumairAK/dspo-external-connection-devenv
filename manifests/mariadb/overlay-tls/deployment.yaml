@@ -1,0 +1,38 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: mariadb
+spec:
+  template:
+    spec:
+      volumes:
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: service-ca.crt
+                path: public.crt
+            name: config-service-cabundle
+          name: cabundle
+        - name: mariadb-certs
+          secret:
+            defaultMode: 420
+            items:
+              - key: tls.crt
+                path: public.crt
+              - key: tls.key
+                path: private.key
+            secretName: mariadb-certs
+        - name: tls-config
+          configMap:
+            name: tls-config
+      containers:
+        - name: mariadb
+          volumeMounts:
+            - mountPath: /.mariadb/certs
+              name: mariadb-certs
+            - mountPath: /.mariadb/certs/CAs
+              name: cabundle
+            - mountPath: /etc/my.cnf.d/z-custom-my.cnf
+              name: tls-config
+              subPath: z-custom-my.cnf
+          terminationMessagePolicy: File

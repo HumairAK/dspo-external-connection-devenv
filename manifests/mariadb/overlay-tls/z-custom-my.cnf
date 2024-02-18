@@ -1,0 +1,4 @@
+[mariadb]
+ssl_cert = /.mariadb/certs/public.crt
+ssl_key = /.mariadb/certs/private.key
+ssl_capath = /.mariadb/certs/CAs
