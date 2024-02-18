@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
+set -eE -o functrace
+
 usage() {
 cat <<EOF
-Usage: $(basename "${BASH_SOURCE[0]}") [-h] [-v] [-f] -u user -b bucket -d database -tls [deploy|cleanup|generate]
+Usage: $(basename "${BASH_SOURCE[0]}") [-h] [-v] [-f] -u user -b bucket -d database -t [deploy|cleanup|generate]
 
 > Note: user must have project admin in both minio_namespace AND mariadb_namespace, and be logged in via `oc login`.
 
@@ -26,11 +28,19 @@ Available options:
 -u      Use this user. (Default: testuser)
 -b      Use this bucket. (Default: mlpipeline)
 -d      Create database with this name. (Default: mlpipeline)
--tls    enable tls deployments for minio/mariadb
+-t      enable tls deployments for minio/mariadb
 
 EOF
   exit
 }
+
+failure() {
+  local lineno=$1
+  local msg=$2
+  echo "Failed at $lineno: $msg"
+}
+trap 'failure ${LINENO} "$BASH_COMMAND"' ERR
+
 
 cleanup() {
   trap - SIGINT SIGTERM ERR EXIT
@@ -56,8 +66,7 @@ parse_args() {
   tlsEnabled="false"
   minioManifestsPath=manifests/minio/base
   mariaDBManifestsPath=manifests/mariadb/base
-
-  while getopts ":hd:u:sb:" options; do
+  while getopts ":hd:u:sb:t" options; do
 
     case "${options}" in
       h)
@@ -72,7 +81,8 @@ parse_args() {
       b)
         bucket="${OPTARG}"
         ;;
-      tls)
+      t)
+        echo "Tls enabled..."
         minioManifestsPath=manifests/minio/overlay-tls
         mariaDBManifestsPath=manifests/mariadb/overlay-tls
         ;;
@@ -85,6 +95,9 @@ parse_args() {
     esac
 
   done
+
+  shift $(( OPTIND - 1 ))
+  [[ "${1}" == "--" ]] && shift
 
   [[ -z "${database-}" ]] && die "Missing required parameter: database"
   return 0
@@ -103,9 +116,12 @@ deploy_minio(){
     echo "Minio Bucket to be used: ${bucket}"
     echo "Minio will be deployed in namespace: ${minio_namespace}"
 
-    pushd ${minioManifestsPath} > /dev/null
-    var=$(passwordgen) yq '.stringData.accesskey = env(var)' secret.yaml | \
+    # Apply the secret in the namespace first before deployment
+    var=$(passwordgen) yq '.stringData.accesskey = env(var)' manifests/minio/base/secret.yaml | \
       var2=$(sleep 1s && passwordgen)  yq '.stringData.secretkey = env(var2)' | oc -n ${minio_namespace} apply -f -
+
+    # Switch to the base or tls overlay dir
+    pushd ${minioManifestsPath} > /dev/null
     kustomize build . | oc -n ${minio_namespace} apply -f -
     popd > /dev/null
     echo "Finished deploying..Minio."
