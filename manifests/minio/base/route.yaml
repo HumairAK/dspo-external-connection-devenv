@@ -8,4 +8,4 @@ spec:
     name: minio
     weight: 100
   port:
-    targetPort: http
+    targetPort: web

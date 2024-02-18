@@ -1,0 +1,8 @@
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: minio
+spec:
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect

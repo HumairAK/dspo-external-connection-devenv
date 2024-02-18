@@ -26,7 +26,8 @@ spec:
           emptyDir: {}
       containers:
         - name: ngrok
-          image:  quay.io/hukhan/ngrok-curl:3.1.1-alpine-1
+          image:  quay.io/hukhan/ngrok-curl:3.6.0-debian
+          imagePullPolicy: Always
           command: ["/bin/sh", "-c", "ngrok config add-authtoken ${NGROK_AUTH} && ngrok tcp 3306"]
           env:
             - name: NGROK_AUTH
@@ -94,7 +95,7 @@ spec:
           ports:
             - containerPort: 3306
               protocol: TCP
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           volumeMounts:
             - name: mariadb-persistent-storage
               mountPath: /var/lib/mysql

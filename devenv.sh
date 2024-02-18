@@ -2,13 +2,15 @@
 
 usage() {
 cat <<EOF
-Usage: $(basename "${BASH_SOURCE[0]}") [-h] [-v] [-f] -u user -b bucket -d database [deploy|cleanup|generate]
+Usage: $(basename "${BASH_SOURCE[0]}") [-h] [-v] [-f] -u user -b bucket -d database -tls [deploy|cleanup|generate]
 
 > Note: user must have project admin in both minio_namespace AND mariadb_namespace, and be logged in via `oc login`.
 
 Deploy MariaDB and Minio in OCP with exposed routes/hosts.
 Secret and Access Key are auto generated.
 Outputs a DataSciencePipelinesApplication cr with external credentials configured.
+
+e.g: ./devenv.sh deploy minio mariadb $ngrok_token
 
 Arguments:
   deploy              requires: minio_namespace mariadb_namespace ngrok_token
@@ -24,6 +26,7 @@ Available options:
 -u      Use this user. (Default: testuser)
 -b      Use this bucket. (Default: mlpipeline)
 -d      Create database with this name. (Default: mlpipeline)
+-tls    enable tls deployments for minio/mariadb
 
 EOF
   exit
@@ -50,6 +53,9 @@ parse_args() {
   database="mlpipeline"
   user="testuser"
   bucket="mlpipeline"
+  tlsEnabled="false"
+  minioManifestsPath=manifests/minio/base
+  mariaDBManifestsPath=manifests/mariadb/base
 
   while getopts ":hd:u:sb:" options; do
 
@@ -65,6 +71,10 @@ parse_args() {
         ;;
       b)
         bucket="${OPTARG}"
+        ;;
+      tls)
+        minioManifestsPath=manifests/minio/overlay-tls
+        mariaDBManifestsPath=manifests/mariadb/overlay-tls
         ;;
       :)
         echo "Error: -${OPTARG} requires an argument."
@@ -93,7 +103,7 @@ deploy_minio(){
     echo "Minio Bucket to be used: ${bucket}"
     echo "Minio will be deployed in namespace: ${minio_namespace}"
 
-    pushd manifests/minio > /dev/null
+    pushd ${minioManifestsPath} > /dev/null
     var=$(passwordgen) yq '.stringData.accesskey = env(var)' secret.yaml | \
       var2=$(sleep 1s && passwordgen)  yq '.stringData.secretkey = env(var2)' | oc -n ${minio_namespace} apply -f -
     kustomize build . | oc -n ${minio_namespace} apply -f -
@@ -108,7 +118,7 @@ deploy_mariadb(){
   echo "MariaDB User to be created: ${user}"
   echo "MariaDB will be deployed in namespace: ${mariadb_namespace}"
 
-  pushd manifests/mariadb > /dev/null
+  pushd ${mariaDBManifestsPath} > /dev/null
   var=$(echo ${ngrok_token}) yq '.stringData.token = env(var)' secret.yaml | \
     var2=$(passwordgen) yq '.stringData.password = env(var2)' | \
     var3=$(passwordgen) yq '.stringData.rootpsw = env(var3)' | \
@@ -157,12 +167,14 @@ generate(){
   IFS=: read -r DB_HOST PORT <<< $IN
   echo Found [host: $DB_HOST] and [port: $PORT] for [pod: $DB_POD] in [namespace: ${mariadb_namespace}]
 
+  # because we are tunneling from localhost, we want to drop the user@loopback indicated by ::1, otherwise anyone
+  # could authenticate via web as root without a password, we do not want that.
   oc -n ${mariadb_namespace} exec -c mariadb -ti $DB_POD -- mysql --user=root -e "DROP USER 'root'@'::1';" || true
   oc -n ${mariadb_namespace} exec -c mariadb -ti $DB_POD -- mysql --user=root -e "CREATE DATABASE ${DATABASE};" || true
   oc -n ${mariadb_namespace} exec -c mariadb -ti $DB_POD -- mysql --user=root -e "GRANT ALL PRIVILEGES ON ${DATABASE}.* TO '${DB_USER}'@'%';" || true
 
   DB_USER_PSW=$(oc -n ${mariadb_namespace} get secret ngrok-auth -o yaml | yq .data.password | base64 -d)
-  echo connect to mariadb by entering the following:
+  echo "connect to mariadb by entering the following:"
   echo mariadb --host=${DB_HOST} --port=${PORT} --user=${DB_USER}  --password=${DB_USER_PSW}
 
 
@@ -205,14 +217,14 @@ cleanup(){
   mariadb_namespace=$2
 
   echo "Cleaning up minio..."
-  pushd manifests/minio > /dev/null
+  pushd ${minioManifestsPath} > /dev/null
   oc -n ${minio_namespace} delete -f secret.yaml --ignore-not-found=true
   kustomize build . | oc -n ${minio_namespace} delete -f - --ignore-not-found=true
   popd > /dev/null
   echo "Done."
 
   echo "Cleaning up mariadb..."
-  pushd manifests/mariadb > /dev/null
+  pushd ${mariaDBManifestsPath} > /dev/null
   oc -n ${mariadb_namespace} delete -f secret.yaml --ignore-not-found=true
   kustomize build . | oc -n ${mariadb_namespace} delete -f - --ignore-not-found=true
   popd > /dev/null

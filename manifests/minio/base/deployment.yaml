@@ -1,11 +1,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: minio
   labels:
     app: minio
     component: data-science-pipelines
+  name: minio
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: minio
@@ -22,44 +23,32 @@ spec:
         - args:
             - server
             - /data
+            - --console-address
+            - :9001
           env:
-            - name: MINIO_ACCESS_KEY
+            - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
                   key: accesskey
-                  name: "minio"
-            - name: MINIO_SECRET_KEY
+                  name: minio
+            - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
                   key: secretkey
-                  name: "minio"
-          image: 'quay.io/opendatahub/minio:RELEASE.2019-08-14T20-37-41Z-license-compliance'
+                  name: minio
+          image: quay.io/minio/minio:RELEASE.2023-10-16T04-13-43Z
+          imagePullPolicy: IfNotPresent
           name: minio
           ports:
             - containerPort: 9000
-          livenessProbe:
-            tcpSocket:
-              port: 9000
-            initialDelaySeconds: 30
-            timeoutSeconds: 1
-            periodSeconds: 5
-            successThreshold: 1
-            failureThreshold: 3
-          readinessProbe:
-            tcpSocket:
-              port: 9000
-            initialDelaySeconds: 5
-            timeoutSeconds: 1
-            periodSeconds: 5
-            successThreshold: 1
-            failureThreshold: 3
+              protocol: TCP
           resources:
-            requests:
-              cpu: 200m
-              memory: 100Mi
             limits:
               cpu: 250m
               memory: 1Gi
+            requests:
+              cpu: 200m
+              memory: 100Mi
           volumeMounts:
             - mountPath: /data
               name: data
