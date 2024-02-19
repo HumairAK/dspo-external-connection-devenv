@@ -1,0 +1,8 @@
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = 0.tcp.ngrok.io
+DNS.2 = mariadb.mariadb.svc
+DNS.3 = mariadb.mariadb.svc.cluster.local
+DNS.4 = localhost
