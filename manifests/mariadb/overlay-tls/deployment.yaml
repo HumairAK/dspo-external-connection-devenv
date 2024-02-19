@@ -6,13 +6,6 @@ spec:
   template:
     spec:
       volumes:
-        - configMap:
-            defaultMode: 420
-            items:
-              - key: service-ca.crt
-                path: public.crt
-            name: config-service-cabundle
-          name: cabundle
         - name: mariadb-certs
           secret:
             defaultMode: 420
@@ -25,14 +18,27 @@ spec:
         - name: tls-config
           configMap:
             name: tls-config
+        - name: ca-bundles
+          projected:
+            sources:
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: kube-root-ca.crt
+              - configMap:
+                  name: config-service-cabundle
+                  items:
+                    - key: service-ca.crt
+                      path: public.crt
       containers:
         - name: mariadb
           volumeMounts:
             - mountPath: /.mariadb/certs
               name: mariadb-certs
-            - mountPath: /.mariadb/certs/CAs
-              name: cabundle
             - mountPath: /etc/my.cnf.d/z-custom-my.cnf
               name: tls-config
               subPath: z-custom-my.cnf
+            - name: ca-bundles
+              mountPath: /.mariadb/certs/CAs
           terminationMessagePolicy: File

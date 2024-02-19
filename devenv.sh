@@ -85,6 +85,7 @@ parse_args() {
         echo "Tls enabled..."
         minioManifestsPath=manifests/minio/overlay-tls
         mariaDBManifestsPath=manifests/mariadb/overlay-tls
+        tlsEnabled="true"
         ;;
       :)
         echo "Error: -${OPTARG} requires an argument."
@@ -138,7 +139,8 @@ deploy_mariadb(){
   var=$(echo ${ngrok_token}) yq '.stringData.token = env(var)' manifests/mariadb/base/secret.yaml | \
     var2=$(passwordgen) yq '.stringData.password = env(var2)' | \
     var3=$(passwordgen) yq '.stringData.rootpsw = env(var3)' | \
-    var4=$(echo ${user}) yq '.stringData.username = env(var4)' | oc -n ${mariadb_namespace} apply -f -
+    var4=${database} yq '.stringData.database = env(var4)' | \
+    var5=$(echo ${user}) yq '.stringData.username = env(var5)' | oc -n ${mariadb_namespace} apply -f -
   pushd ${mariaDBManifestsPath} > /dev/null
   kustomize build . | oc -n ${mariadb_namespace} apply -f -
   popd > /dev/null
@@ -170,9 +172,9 @@ generate(){
   mariadb_namespace=$2
   BUCKET=$bucket
 
-  echo "Fetching DB Pod"
+  echo "Fetching DB Pod (3m timeout)"
   DB_POD=$(oc -n ${mariadb_namespace} get pod -l app=mariadb --no-headers | awk '{print $1}')
-  oc -n ${mariadb_namespace} wait --for=condition=Ready pod/$DB_POD
+  oc -n ${mariadb_namespace} wait --for=condition=Ready pod/$DB_POD --timeout=3m
 
   echo "Fetching DB host and port"
   MARIADBHOSTPORT=`oc -n ${mariadb_namespace} exec -c ngrok -ti $DB_POD -- curl -s localhost:4040/api/tunnels | jq .tunnels[0].public_url | grep tcp`
@@ -187,7 +189,7 @@ generate(){
   # because we are tunneling from localhost, we want to drop the user@loopback indicated by ::1, otherwise anyone
   # could authenticate via web as root without a password, we do not want that.
   oc -n ${mariadb_namespace} exec -c mariadb -ti $DB_POD -- mysql --user=root -e "DROP USER 'root'@'::1';" || true
-  oc -n ${mariadb_namespace} exec -c mariadb -ti $DB_POD -- mysql --user=root -e "CREATE DATABASE ${DATABASE};" || true
+  oc -n ${mariadb_namespace} exec -c mariadb -ti $DB_POD -- mysql --user=root -e "CREATE DATABASE IF NOT EXISTS ${DATABASE};" || true
   oc -n ${mariadb_namespace} exec -c mariadb -ti $DB_POD -- mysql --user=root -e "GRANT ALL PRIVILEGES ON ${DATABASE}.* TO '${DB_USER}'@'%';" || true
 
   DB_USER_PSW=$(oc -n ${mariadb_namespace} get secret ngrok-auth -o yaml | yq .data.password | base64 -d)
@@ -218,6 +220,13 @@ generate(){
   var=$(echo ${PORT}) yq -i '.spec.database.externalDB.port = strenv(var)' dspa.yaml
   var=$(echo ${DB_USER}) yq -i '.spec.database.externalDB.username = env(var)' dspa.yaml
   var=$(echo ${BUCKET}) yq -i '.spec.objectStorage.externalStorage.bucket = env(var)' dspa.yaml
+
+  yq -i '.spec.objectStorage.externalStorage.scheme = "https"' dspa.yaml
+  if [[ $tlsEnabled == "false" ]]
+  then
+    var=$(echo {\"tls\":\"false\"}) yq -i '.spec.database.customExtraParams = strenv(var)' dspa.yaml
+    yq -i '.spec.objectStorage.externalStorage.scheme = "http"' dspa.yaml
+  fi
 
   MINIO_HOST=$(oc -n ${minio_namespace} get route minio --template={{.spec.host}})
   var=$(echo ${MINIO_HOST}) yq -i '.spec.objectStorage.externalStorage.host = env(var)' dspa.yaml

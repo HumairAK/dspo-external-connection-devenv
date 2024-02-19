@@ -16,7 +16,6 @@ spec:
     externalStorage:
       bucket: <MINIO_BUCKET>
       host: <MINIO_HOST>
-      port: "80"
       s3CredentialsSecret:
         accessKey: customaccessKey
         secretKey: customsecretKey
