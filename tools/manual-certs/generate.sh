@@ -1,19 +1,9 @@
 #!/usr/bin/env bash
 
-#openssl req \
-#  -x509 \
-#  -sha256 \
-#  -newkey rsa:4096 \
-#  -keyout key.pem \
-#  -out cert.pem \
-#  -days 3650 \
-#  -nodes \
-#  -subj "/C=XX/CN=0.tcp.ngrok.io" \
-#  -addext "subjectAltName = DNS:mariadb.mariadb.svc,mariadb.mariadb.svc.cluster.local,localhost"
-
+path="${1:-"."}"
 
 # Create Key and CSR
-openssl req -newkey rsa:4096 -nodes -keyout domain.key -out domain.csr -subj "/C=XX/CN=0.tcp.ngrok.io"
+openssl req -newkey rsa:4096 -nodes -keyout ${path}/domain.key -out ${path}/domain.csr -subj "/C=XX/CN=*.tcp.ngrok.io"
 
 # Creating a CA-Signed Certificate With Our Own CA
 
@@ -22,11 +12,11 @@ openssl req \
   -x509 -sha256 \
   -days 3650 \
   -newkey rsa:4096 \
-  -keyout rootCA.key \
+  -keyout ${path}/rootCA.key \
   -nodes \
-  -out rootCA.crt \
-  -subj "/C=XX/CN=0.tcp.ngrok.io"
+  -out ${path}/rootCA.crt \
+  -subj "/C=XX/CN=rh-dsp-devs.io"
 
 # Sign Our CSR With Root CA
 # As a result, the CA-signed certificate will be in the domain.crt file.
-openssl x509 -req -days 3650 -CA rootCA.crt -CAkey rootCA.key -in domain.csr -out domain.crt -CAcreateserial -extfile domain.ext
+openssl x509 -req -days 3650 -CA ${path}/rootCA.crt -CAkey ${path}/rootCA.key -in ${path}/domain.csr -out ${path}/domain.crt -CAcreateserial -extfile domain.ext

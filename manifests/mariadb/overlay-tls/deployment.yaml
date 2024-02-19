@@ -10,19 +10,19 @@ spec:
           secret:
             defaultMode: 420
             items:
-              - key: tls.crt
+              - key: domain.crt
                 path: public.crt
-              - key: tls.key
+              - key: domain.key
                 path: private.key
-            secretName: mariadb-certs
+            secretName: self-signed-certs
         - name: tls-config
           configMap:
             name: tls-config
         - name: ca-bundle
           configMap:
-            name: config-service-cabundle
+            name: self-signed-ca
             items:
-              - key: service-ca.crt
+              - key: rootCA.crt
                 path: public.crt
       containers:
         - name: mariadb

@@ -159,10 +159,6 @@ deploy(){
 
 generate(){
   echo "Generating manifests..."
-
-  if [ ! -d "./output" ]; then
-    mkdir output
-  fi
   cp ./manifests/templates/* ./output/
 
   msg="usage: ./devenv.sh generate minio_namespace mariadb_namespace"
@@ -240,6 +236,38 @@ generate(){
   popd > /dev/null
 }
 
+generate-deploy-certs(){
+  [[ $# < 3 ]] && die "Missing script arguments ($msg)"
+  [[ $# > 3 ]] && die "Too many script arguments ($msg)"
+  minio_namespace=$1
+  mariadb_namespace=$2
+  path=output/certs
+
+  # Create Key and CSR
+  openssl req -newkey rsa:4096 -nodes -keyout ${path}/domain.key -out ${path}/domain.csr -subj "/C=XX/CN=*.tcp.ngrok.io" 2>/dev/null
+
+  # Creating a CA-Signed Certificate With Our Own CA
+
+  # Create a Self-Signed Root CA
+  openssl req \
+    -x509 -sha256 \
+    -days 3650 \
+    -newkey rsa:4096 \
+    -keyout ${path}/rootCA.key \
+    -nodes \
+    -out ${path}/rootCA.crt \
+    -subj "/C=XX/CN=rh-dsp-devs.io" 2>/dev/null
+
+  # Sign Our CSR With Root CA
+  # As a result, the CA-signed certificate will be in the domain.crt file.
+  openssl x509 -req -days 3650 -CA ${path}/rootCA.crt -CAkey ${path}/rootCA.key -in ${path}/domain.csr -out ${path}/domain.crt -CAcreateserial -extfile tools/manual-certs/domain.ext 2>/dev/null
+
+  cp  manifests/templates/kutomization-certs-template.yaml $path/kustomization.yaml
+  pushd $path
+  kustomize build . | oc -n ${mariadb_namespace} apply -f -
+  popd
+}
+
 cleanup(){
   echo "Cleaning up..."
   msg="usage: ./devenv.sh cleanup minio_namespace mariadb_namespace"
@@ -265,6 +293,12 @@ cleanup(){
 
 parse_args "$@"
 
+
+if [ ! -d "./output" ]; then
+  mkdir output
+  mkdir output/certs
+fi
+
 shift $(( OPTIND - 1 ))
 command=$1
 case $command in
@@ -272,6 +306,7 @@ case $command in
     generate "${@:2}"
     ;;
   deploy)
+    generate-deploy-certs "${@:2}"
     deploy "${@:2}"
     generate $2 $3
     ;;
