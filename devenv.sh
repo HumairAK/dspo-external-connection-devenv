@@ -194,8 +194,14 @@ generate(){
 
   DB_USER_PSW=$(oc -n ${mariadb_namespace} get secret ngrok-auth -o yaml | yq .data.password | base64 -d)
   echo "connect to mariadb by entering the following:"
-  echo mariadb --host=${DB_HOST} --port=${PORT} --user=${DB_USER}  --password=${DB_USER_PSW}
 
+  if [[ $tlsEnabled == "true" ]]
+  then
+      oc get configmap config-service-cabundle -o yaml | yq '.data."service-ca.crt"' > output/ca.crt
+      echo mariadb --host=${DB_HOST} --port=${PORT} --user=${DB_USER}  --password=${DB_USER_PSW} --ssl-ca=./output/ca.crt
+  else
+      echo mariadb --host=${DB_HOST} --port=${PORT} --user=${DB_USER}  --password=${DB_USER_PSW}
+  fi
 
   pushd ./output/ > /dev/null
 
