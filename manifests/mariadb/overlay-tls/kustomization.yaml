@@ -7,5 +7,4 @@ configMapGenerator:
     files:
       - z-custom-my.cnf
 patches:
-#  - path: service.yaml
   - path: deployment.yaml

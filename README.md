@@ -65,6 +65,10 @@ MariaDB [(none)]> SHOW GLOBAL VARIABLES LIKE 'have_ssl';
 
 ```
 
+Add a configmap "odh-trusted-ca-bundle" to the DSPA's namespace and in it's `.data` field add the contents of: `output/certs/rootCA.crt` 
+combined with the contents of `kube-root-ca.crt` (find this configmap in the DSPA's namespace). 
+
+
 # Cleanup
 
 ```bash

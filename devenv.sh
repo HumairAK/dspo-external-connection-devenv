@@ -243,6 +243,9 @@ generate-deploy-certs(){
   mariadb_namespace=$2
   path=output/certs
 
+  # Setup kustomize file for cert configmaps
+  cp  manifests/templates/kutomization-certs-template.yaml $path/kustomization.yaml
+
   # Create Key and CSR
   openssl req -newkey rsa:4096 -nodes -keyout ${path}/domain.key -out ${path}/domain.csr -subj "/C=XX/CN=*.tcp.ngrok.io" 2>/dev/null
 
@@ -262,7 +265,7 @@ generate-deploy-certs(){
   # As a result, the CA-signed certificate will be in the domain.crt file.
   openssl x509 -req -days 3650 -CA ${path}/rootCA.crt -CAkey ${path}/rootCA.key -in ${path}/domain.csr -out ${path}/domain.crt -CAcreateserial -extfile tools/manual-certs/domain.ext 2>/dev/null
 
-  cp  manifests/templates/kutomization-certs-template.yaml $path/kustomization.yaml
+
   pushd $path
   kustomize build . | oc -n ${mariadb_namespace} apply -f -
   popd
