@@ -150,6 +150,12 @@ deploy(){
   msg="usage: ./devenv.sh deploy minio_namespace mariadb_namespace ngrok_token"
   [[ $# < 3 ]] && die "Missing script arguments ($msg)"
   [[ $# > 3 ]] && die "Too many script arguments ($msg)"
+
+  if [[ $tlsEnabled == "true" ]]
+  then
+      generate-deploy-certs "${@:1}"
+  fi
+
   minio_namespace=$1
   mariadb_namespace=$2
   ngrok_token=$3
@@ -193,8 +199,24 @@ generate(){
 
   if [[ $tlsEnabled == "true" ]]
   then
-      oc get configmap config-service-cabundle -o yaml | yq '.data."service-ca.crt"' > output/ca.crt
-      echo mariadb --host=${DB_HOST} --port=${PORT} --user=${DB_USER}  --password=${DB_USER_PSW} --ssl-ca=./output/ca.crt
+
+      oc get configmap kube-root-ca.crt -o yaml | yq '.data."ca.crt"' > output/ca-bundle.crt
+      cat output/certs/rootCA.crt >> output/ca-bundle.crt
+
+cat <<EOF >> output/kustomization.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+- name: odh-trusted-ca-bundle
+  files:
+  - ca-bundle.crt
+EOF
+
+      echo mariadb --host=${DB_HOST} --port=${PORT} --user=${DB_USER}  --password=${DB_USER_PSW} --ssl-ca=./output/certs/rootCA.crt
+
+
+
   else
       echo mariadb --host=${DB_HOST} --port=${PORT} --user=${DB_USER}  --password=${DB_USER_PSW}
   fi
@@ -265,7 +287,6 @@ generate-deploy-certs(){
   # As a result, the CA-signed certificate will be in the domain.crt file.
   openssl x509 -req -days 3650 -CA ${path}/rootCA.crt -CAkey ${path}/rootCA.key -in ${path}/domain.csr -out ${path}/domain.crt -CAcreateserial -extfile tools/manual-certs/domain.ext 2>/dev/null
 
-
   pushd $path
   kustomize build . | oc -n ${mariadb_namespace} apply -f -
   popd
@@ -309,7 +330,6 @@ case $command in
     generate "${@:2}"
     ;;
   deploy)
-    generate-deploy-certs "${@:2}"
     deploy "${@:2}"
     generate $2 $3
     ;;
