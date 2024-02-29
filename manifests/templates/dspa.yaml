@@ -3,6 +3,7 @@ kind: DataSciencePipelinesApplication
 metadata:
   name: extrenal-storage
 spec:
+  dspVersion: v2
   database:
     externalDB:
       host: <DB_HOST>
@@ -22,4 +23,4 @@ spec:
         secretName: s3secret
       scheme: http
   mlpipelineUI:
-    image: 'quay.io/opendatahub/odh-ml-pipelines-frontend-container:beta-ui'
+    image: 'quay.io/opendatahub/ds-pipelines-frontend:latest'

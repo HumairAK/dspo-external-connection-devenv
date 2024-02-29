@@ -165,7 +165,9 @@ deploy(){
 
 generate(){
   echo "Generating manifests..."
-  cp ./manifests/templates/* ./output/
+  cp ./manifests/templates/db-secret.yaml ./output/db-secret.yaml
+  cp ./manifests/templates/dspa.yaml ./output/dspa.yaml
+  cp ./manifests/templates/storage-secret.yaml ./output/storage-secret.yaml
 
   msg="usage: ./devenv.sh generate minio_namespace mariadb_namespace"
   [[ $# < 2 ]] && die "Missing script arguments ($msg)"
@@ -317,6 +319,11 @@ cleanup(){
 
 parse_args "$@"
 
+
+if test -f output/kustomization.yaml; then
+  echo "Removing pre-existing kustomization.yaml"
+  rm output/kustomization.yaml
+fi
 
 if [ ! -d "./output" ]; then
   mkdir output

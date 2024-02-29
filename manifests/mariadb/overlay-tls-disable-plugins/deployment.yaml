@@ -1,0 +1,43 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: mariadb
+spec:
+  template:
+    spec:
+      volumes:
+        - name: mariadb-certs
+          secret:
+            defaultMode: 420
+            items:
+              - key: domain.crt
+                path: public.crt
+              - key: domain.key
+                path: private.key
+            secretName: self-signed-certs
+        - name: tls-config
+          configMap:
+            name: tls-config
+        - name: disabled-plugins-config
+          configMap:
+            name: disabled-plugins-config
+        - name: ca-bundle
+          configMap:
+            name: self-signed-ca
+            items:
+              - key: rootCA.crt
+                path: public.crt
+      containers:
+        - name: mariadb
+          volumeMounts:
+            - mountPath: /.mariadb/certs
+              name: mariadb-certs
+            - mountPath: /etc/my.cnf.d/z-custom-my.cnf
+              name: tls-config
+              subPath: z-custom-my.cnf
+            - mountPath: /etc/mysql/disabled_plugins.ini
+              name: disabled-plugins-config
+              subPath: disabled_plugins.ini
+            - name: ca-bundle
+              mountPath: /.mariadb/certs/CAs
+          terminationMessagePolicy: File
