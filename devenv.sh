@@ -29,6 +29,8 @@ Available options:
 -b      Use this bucket. (Default: mlpipeline)
 -d      Create database with this name. (Default: mlpipeline)
 -t      enable tls deployments for minio/mariadb
+-s     do tls with minio only, use with -t, mutually exclusive to -d
+-d   do tls with mariadb only, use with -t, mutually exclusive to -s
 
 EOF
   exit
@@ -66,7 +68,10 @@ parse_args() {
   tlsEnabled="false"
   minioManifestsPath=manifests/minio/base
   mariaDBManifestsPath=manifests/mariadb/base
-  while getopts ":hd:u:sb:t" options; do
+  tlsMinioOnly="false"
+  tlsMariaDBonly="false"
+
+  while getopts ":hd:u:sb:tsd" options; do
 
     case "${options}" in
       h)
@@ -83,9 +88,13 @@ parse_args() {
         ;;
       t)
         echo "Tls enabled..."
-        minioManifestsPath=manifests/minio/overlay-tls
-        mariaDBManifestsPath=manifests/mariadb/overlay-tls
         tlsEnabled="true"
+        ;;
+      s)
+        tlsMinioOnly="true"
+        ;;
+      d)
+        tlsMariaDBonly="true"
         ;;
       :)
         echo "Error: -${OPTARG} requires an argument."
@@ -101,6 +110,28 @@ parse_args() {
   [[ "${1}" == "--" ]] && shift
 
   [[ -z "${database-}" ]] && die "Missing required parameter: database"
+
+  if [[ $tlsMinioOnly == "true" && $tlsMariaDBonly == "true" ]]
+  then
+    echo "Specify only one of -ts or -tdb (mutually exclusive)"
+    exit 1
+  fi
+
+  if [[ $tlsEnabled == "true" ]]
+  then
+    if [[ $tlsMinioOnly == "true" ]]; then
+      echo "Only Minio will be configured with TLS"
+      minioManifestsPath=manifests/minio/overlay-tls
+    elif [[ $tlsMariaDBonly == "true" ]]; then
+      echo "Only MariaDB will be configured with TLS"
+      mariaDBManifestsPath=manifests/mariadb/overlay-tls
+    else
+      echo "Both Minio & MariaDB will be configured with TLS"
+      minioManifestsPath=manifests/minio/overlay-tls
+      mariaDBManifestsPath=manifests/mariadb/overlay-tls
+    fi
+  fi
+
   return 0
 }
 
@@ -202,22 +233,23 @@ generate(){
   if [[ $tlsEnabled == "true" ]]
   then
 
-      oc get configmap kube-root-ca.crt -o yaml | yq '.data."ca.crt"' > output/ca-bundle.crt
-      cat output/certs/rootCA.crt >> output/ca-bundle.crt
+      oc get configmap kube-root-ca.crt -o yaml | yq '.data."ca.crt"' > output/kube-root-ca.crt
+      cat output/certs/rootCA.crt > output/odh-ca-bundle.crt
 
 cat <<EOF >> output/kustomization.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
+  annotations:
+    "config.openshift.io/inject-trusted-cabundle": "true"
 configMapGenerator:
 - name: odh-trusted-ca-bundle
   files:
-  - ca-bundle.crt
+  - odh-ca-bundle.crt
+  - kube-root-ca.crt
 EOF
 
       echo mariadb --host=${DB_HOST} --port=${PORT} --user=${DB_USER}  --password=${DB_USER_PSW} --ssl-ca=./output/certs/rootCA.crt
-
-
 
   else
       echo mariadb --host=${DB_HOST} --port=${PORT} --user=${DB_USER}  --password=${DB_USER_PSW}
@@ -318,7 +350,6 @@ cleanup(){
 }
 
 parse_args "$@"
-
 
 if test -f output/kustomization.yaml; then
   echo "Removing pre-existing kustomization.yaml"
